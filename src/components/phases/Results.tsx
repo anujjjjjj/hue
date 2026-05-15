@@ -3,6 +3,7 @@ import { Blob } from '../blob/Blob';
 import { Button } from '../ui/Button';
 import { MonoLabel } from '../ui/MonoLabel';
 import { useGameStore } from '../../store/gameStore';
+import { RUN_LENGTH, MAX_ROUND_SCORE } from '../../lib/run';
 
 const COUNT_UP_MS = 1100;
 const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
@@ -11,7 +12,12 @@ export function Results() {
   const guess = useGameStore((s) => s.guess);
   const target = useGameStore((s) => s.target);
   const result = useGameStore((s) => s.result);
-  const playAgain = useGameStore((s) => s.playAgain);
+  const run = useGameStore((s) => s.run);
+  const advanceRound = useGameStore((s) => s.advanceRound);
+
+  const isFinalRound = run.roundIndex >= RUN_LENGTH - 1;
+  const roundsPlayed = run.results.length;
+  const maxSoFar = roundsPlayed * MAX_ROUND_SCORE;
 
   const [shown, setShown] = useState(0);
   const startRef = useRef<number | null>(null);
@@ -71,7 +77,15 @@ export function Results() {
         ))}
       </div>
 
-      <Button onClick={playAgain}>Play again</Button>
+      {run.active && roundsPlayed > 0 && (
+        <MonoLabel className="text-dimmer" tracking={0.2}>
+          Run total · {run.totalScore.toFixed(1)} / {maxSoFar} so far
+        </MonoLabel>
+      )}
+
+      <Button onClick={advanceRound}>
+        {isFinalRound ? 'See results' : 'Next round'}
+      </Button>
     </div>
   );
 }

@@ -4,9 +4,13 @@ import { Intro } from './components/phases/Intro';
 import { Memorize } from './components/phases/Memorize';
 import { Recall } from './components/phases/Recall';
 import { Results } from './components/phases/Results';
+import { Summary } from './components/phases/Summary';
 import { useGameStore, type Phase } from './store/gameStore';
 
 const CROSSFADE_MS = 560;
+// Results → Summary marks the shift from "a round" to "the whole run".
+// A beat longer than the standard crossfade, but still understated.
+const SUMMARY_CROSSFADE_MS = 720;
 
 function renderPhase(phase: Phase) {
   switch (phase) {
@@ -18,6 +22,8 @@ function renderPhase(phase: Phase) {
       return <Recall />;
     case 'results':
       return <Results />;
+    case 'summary':
+      return <Summary />;
   }
 }
 
@@ -29,14 +35,19 @@ export default function App() {
   const [previous, setPrevious] = useState<Phase | null>(null);
   const fadeKey = useRef(0);
 
+  const transitionMs =
+    current === 'results' && phase === 'summary'
+      ? SUMMARY_CROSSFADE_MS
+      : CROSSFADE_MS;
+
   useEffect(() => {
     if (phase === current) return;
     setPrevious(current);
     setCurrent(phase);
     fadeKey.current += 1;
-    const t = setTimeout(() => setPrevious(null), CROSSFADE_MS);
+    const t = setTimeout(() => setPrevious(null), transitionMs);
     return () => clearTimeout(t);
-  }, [phase, current]);
+  }, [phase, current, transitionMs]);
 
   return (
     <div className="flex h-full flex-col">
@@ -47,7 +58,7 @@ export default function App() {
             key={`prev-${fadeKey.current}`}
             className="absolute inset-0"
             style={{
-              animation: `phaseOut ${CROSSFADE_MS}ms ease forwards`,
+              animation: `phaseOut ${transitionMs}ms ease forwards`,
             }}
           >
             {renderPhase(previous)}
@@ -58,7 +69,7 @@ export default function App() {
           className="absolute inset-0"
           style={{
             animation: previous
-              ? `phaseIn ${CROSSFADE_MS}ms ease forwards`
+              ? `phaseIn ${transitionMs}ms ease forwards`
               : undefined,
           }}
         >
