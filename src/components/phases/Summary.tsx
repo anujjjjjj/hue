@@ -4,6 +4,13 @@ import { MonoLabel } from '../ui/MonoLabel';
 import { hsbToHex, type HSB } from '../../lib/color';
 import { MAX_RUN_SCORE, verdictFor } from '../../lib/run';
 import { useGameStore, type RunRoundEntry } from '../../store/gameStore';
+import {
+  formatDailyDate,
+  msUntilNextUTCMidnight,
+  todayUTC,
+} from '../../lib/daily';
+import { ShareButton } from '../share/ShareButton';
+import { track } from '../../lib/analytics';
 
 const TOTAL_COUNT_UP_MS = 1400;
 const ROW_STAGGER_MS = 80;
@@ -13,13 +20,34 @@ const pad = (n: number) => n.toString().padStart(2, '0');
 
 export function Summary() {
   const run = useGameStore((s) => s.run);
+  const mode = useGameStore((s) => s.mode);
+  const dailyDate = useGameStore((s) => s.dailyDate);
+  const dailyRevisit = useGameStore((s) => s.dailyRevisit);
   const playAgain = useGameStore((s) => s.playAgain);
+  const startDaily = useGameStore((s) => s.startDaily);
 
   const [shownTotal, setShownTotal] = useState(0);
   const startRef = useRef<number | null>(null);
 
-  // Total count-up is the bigger moment than a single-round count-up — give
-  // it ~1.4s of weight. Same ease-out cubic shape as Results, just longer.
+  // One-shot daily_completed event. Only fires for a Daily that ended this
+  // session — not when the user revisits a previously-completed Daily.
+  const firedCompleteRef = useRef(false);
+  useEffect(() => {
+    if (
+      mode === 'daily' &&
+      dailyDate &&
+      !dailyRevisit &&
+      !firedCompleteRef.current
+    ) {
+      firedCompleteRef.current = true;
+      track('daily_completed', {
+        date: dailyDate,
+        score: Number(run.totalScore.toFixed(2)),
+      });
+    }
+  }, [mode, dailyDate, dailyRevisit, run.totalScore]);
+
+  // Total count-up — 1.4s ease-out cubic. Same shape as Results, longer.
   useEffect(() => {
     let raf = 0;
     const tick = (now: number) => {
@@ -33,6 +61,9 @@ export function Summary() {
   }, [run.totalScore]);
 
   if (run.results.length === 0) return null;
+
+  const isDaily = mode === 'daily' && !!dailyDate;
+  const isTodaysDaily = isDaily && dailyDate === todayUTC();
 
   return (
     <div className="flex h-full flex-col items-center overflow-y-auto px-6 py-10 sm:py-14">
@@ -49,16 +80,48 @@ export function Summary() {
         </span>
       </div>
 
+      {isDaily && dailyDate && (
+        <MonoLabel className="mt-3 text-dimmer" tracking={0.22}>
+          Today's Daily · {formatDailyDate(dailyDate)}
+        </MonoLabel>
+      )}
+
       <div className="mt-10 w-full max-w-[440px]">
         {run.results.map((entry, i) => (
           <Row key={entry.index} entry={entry} stagger={i} />
         ))}
       </div>
 
-      <div className="mt-10 flex items-center gap-3">
-        <Button onClick={playAgain}>Play again</Button>
-        {/* Share button slots here — Build Spec 03 */}
+      <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+        {isDaily ? (
+          <ShareButton />
+        ) : (
+          <>
+            <Button onClick={playAgain}>Play again</Button>
+            <ShareButton />
+          </>
+        )}
       </div>
+
+      {isTodaysDaily && (
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <NextDailyCountdown />
+          <button
+            onClick={playAgain}
+            className="font-mono text-[11px] uppercase tracking-[0.22em] text-dimmer transition-colors hover:text-dim"
+          >
+            Or play free
+          </button>
+        </div>
+      )}
+
+      {isDaily && !isTodaysDaily && (
+        <div className="mt-6">
+          <Button variant="ghost" onClick={() => startDaily()}>
+            Play today's Daily
+          </Button>
+        </div>
+      )}
 
       <style>{`
         @keyframes summaryRowIn {
@@ -103,5 +166,26 @@ function Swatch({ hsb, label }: { hsb: HSB; label: string }) {
       className="h-11 w-11 rounded-md border border-line-2 sm:h-12 sm:w-12"
       style={{ backgroundColor: hsbToHex(hsb.h, hsb.s, hsb.b) }}
     />
+  );
+}
+
+function NextDailyCountdown() {
+  const [ms, setMs] = useState(() => msUntilNextUTCMidnight());
+
+  useEffect(() => {
+    const id = setInterval(() => setMs(msUntilNextUTCMidnight()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const totalMinutes = Math.max(0, Math.floor(ms / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const countdown =
+    hours > 0 ? `${hours}h ${pad(minutes)}m` : `${minutes}m`;
+
+  return (
+    <MonoLabel className="text-dim" tracking={0.22}>
+      Tomorrow's colors at 00:00 UTC · {countdown}
+    </MonoLabel>
   );
 }
