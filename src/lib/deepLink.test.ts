@@ -40,4 +40,26 @@ describe('parseDeepLink', () => {
   it('ignores unknown params', () => {
     expect(parseDeepLink('?foo=bar', '2026-05-16')).toEqual({ kind: 'none' });
   });
+
+  it('parses ?m= as a match deep link, uppercasing', () => {
+    expect(parseDeepLink('?m=abcdef', '2026-05-16')).toEqual({
+      kind: 'match',
+      matchId: 'ABCDEF',
+    });
+  });
+
+  it('treats malformed ?m= as none (no crash, friendly fallback)', () => {
+    expect(parseDeepLink('?m=garbage!!', '2026-05-16')).toEqual({
+      kind: 'none',
+    });
+    expect(parseDeepLink('?m=ABCDE0', '2026-05-16')).toEqual({ kind: 'none' });
+    // Ambiguous chars (0,O,1,I,L) are excluded.
+    expect(parseDeepLink('?m=ABCDEO', '2026-05-16')).toEqual({ kind: 'none' });
+  });
+
+  it('?m= wins over ?d= when both are present', () => {
+    expect(
+      parseDeepLink('?d=2026-05-16&m=ABCDEF', '2026-05-16'),
+    ).toEqual({ kind: 'match', matchId: 'ABCDEF' });
+  });
 });

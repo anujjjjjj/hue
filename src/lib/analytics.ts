@@ -10,7 +10,13 @@ export type AnalyticsEvent =
   | 'daily_revisit'
   | 'share_clicked'
   | 'share_method'
-  | 'deeplink_opened';
+  | 'deeplink_opened'
+  | 'match_created'
+  | 'match_link_opened'
+  | 'match_run_submitted'
+  | 'match_complete_viewed'
+  | 'match_new_match_clicked'
+  | 'match_share_clicked';
 
 type EventProps = Record<string, string | number | boolean | null>;
 
