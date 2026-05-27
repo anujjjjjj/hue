@@ -11,6 +11,11 @@ import {
 } from '../../lib/daily';
 import { ShareButton } from '../share/ShareButton';
 import { track } from '../../lib/analytics';
+import { createMatch } from '../../lib/db/matches';
+import { attachRunToMatch } from '../../lib/db/runs';
+import { hasBackend } from '../../lib/db/client';
+import { getNickname } from '../../lib/db/player';
+import { NicknamePrompt } from '../ui/NicknamePrompt';
 
 const TOTAL_COUNT_UP_MS = 1400;
 const ROW_STAGGER_MS = 80;
@@ -23,8 +28,16 @@ export function Summary() {
   const mode = useGameStore((s) => s.mode);
   const dailyDate = useGameStore((s) => s.dailyDate);
   const dailyRevisit = useGameStore((s) => s.dailyRevisit);
+  const freeRunId = useGameStore((s) => s.freeRunId);
   const playAgain = useGameStore((s) => s.playAgain);
   const startDaily = useGameStore((s) => s.startDaily);
+  const goToLobby = useGameStore((s) => s.goToLobby);
+
+  const [challenging, setChallenging] = useState(false);
+  const [challengeError, setChallengeError] = useState<string | null>(null);
+  // Same JIT-naming gate as Intro's Create match: don't ship Anonymous
+  // matches into a friend's inbox.
+  const [namingForChallenge, setNamingForChallenge] = useState(false);
 
   const [shownTotal, setShownTotal] = useState(0);
   const startRef = useRef<number | null>(null);
@@ -64,6 +77,59 @@ export function Summary() {
 
   const isDaily = mode === 'daily' && !!dailyDate;
   const isTodaysDaily = isDaily && dailyDate === todayUTC();
+  // Path B: only Free Play runs can spawn a challenge (spec §7).
+  // The button is disabled until submitRun resolves with a runId — without
+  // it we can't attachRunToMatch.
+  const canChallenge =
+    mode === 'free' && hasBackend() && !!freeRunId;
+
+  function handleChallengeClick() {
+    if (challenging || !canChallenge) return;
+    if (!getNickname().trim()) {
+      setChallengeError(null);
+      setNamingForChallenge(true);
+      return;
+    }
+    void handleChallenge();
+  }
+
+  async function handleChallenge() {
+    if (challenging || !canChallenge || !freeRunId) return;
+    setChallenging(true);
+    setChallengeError(null);
+    // Spawn a match whose seed is THIS run's seed, so the joiner plays the
+    // same five colors. The creator's run is attached retroactively.
+    const match = await createMatch({
+      gameId: 'hue',
+      seed: run.seed,
+      createdByRunId: freeRunId,
+    });
+    if (!match) {
+      setChallenging(false);
+      setChallengeError(
+        "Couldn't create the match. Check your connection and try again.",
+      );
+      return;
+    }
+    const attached = await attachRunToMatch(freeRunId, match.id);
+    setChallenging(false);
+    if (!attached) {
+      // Match exists but the run isn't paired with it — degraded but not
+      // fatal. The opponent will see no creator run in the comparison.
+      // Surface this honestly rather than pretending it worked.
+      setChallengeError(
+        "Match created, but your run didn't attach. The link still works; tap again to retry.",
+      );
+      return;
+    }
+    track('match_created', { entry: 'challenge_after', game_id: 'hue' });
+    // The attached Free Play run is now a match participant — the creator's
+    // submission is "in" by virtue of attach, so log it under the same event
+    // we'd fire for an in-match run submission.
+    track('match_run_submitted', { game_id: 'hue', is_creator: true });
+    setNamingForChallenge(false);
+    goToLobby(match.id);
+  }
 
   return (
     <div className="flex h-full flex-col items-center overflow-y-auto px-6 py-10 sm:py-14">
@@ -98,10 +164,34 @@ export function Summary() {
         ) : (
           <>
             <Button onClick={playAgain}>Play again</Button>
+            <Button
+              variant="ghost"
+              onClick={handleChallengeClick}
+              disabled={!canChallenge || challenging}
+            >
+              {challenging ? 'Creating…' : 'Challenge a friend'}
+            </Button>
             <ShareButton />
           </>
         )}
       </div>
+
+      {namingForChallenge && (
+        <div className="mt-6 flex flex-col items-center">
+          <NicknamePrompt
+            ctaLabel="Send challenge"
+            busy={challenging}
+            onSubmit={() => void handleChallenge()}
+            onCancel={() => setNamingForChallenge(false)}
+          />
+        </div>
+      )}
+
+      {challengeError && (
+        <p className="mt-4 max-w-[40ch] text-center font-mono text-[11px] uppercase tracking-[0.22em] text-dim">
+          {challengeError}
+        </p>
+      )}
 
       {isTodaysDaily && (
         <div className="mt-6 flex flex-col items-center gap-3">

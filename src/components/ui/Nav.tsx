@@ -30,7 +30,11 @@ export function Nav() {
       {showIndicator ? (
         <MonoLabel className="text-dim" tracking={0.25}>
           Round {pad(run.roundIndex + 1)} · of {pad(RUN_LENGTH)}
-          {mode === 'daily' ? ' · Daily' : ''}
+          {mode === 'daily'
+            ? ' · Daily'
+            : mode === 'match'
+              ? ' · Match'
+              : ''}
         </MonoLabel>
       ) : (
         <span />

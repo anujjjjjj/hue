@@ -1,11 +1,14 @@
-// Deep-link parsing. Structured so adding ?seed= (Build Spec 04 — Versus)
-// is one extra branch, not a rewrite.
+// Deep-link parsing. The ?d= Daily branch and the ?m= multiplayer branch
+// are independent — when both are present, ?m= wins (a recipient explicitly
+// arriving via a match link should land in the match, not today's Daily).
 
 import { parseUTCDate, todayUTC } from './daily';
+import { normalizeMatchId } from './db/matches';
 
 export type DeepLink =
   | { kind: 'daily-today'; date: string }
   | { kind: 'daily-past'; date: string }
+  | { kind: 'match'; matchId: string }
   | { kind: 'none' };
 
 export function parseDeepLink(search: string, today = todayUTC()): DeepLink {
@@ -13,6 +16,12 @@ export function parseDeepLink(search: string, today = todayUTC()): DeepLink {
   try {
     params = new URLSearchParams(search);
   } catch {
+    return { kind: 'none' };
+  }
+  const m = params.get('m');
+  if (m) {
+    const normalized = normalizeMatchId(m);
+    if (normalized) return { kind: 'match', matchId: normalized };
     return { kind: 'none' };
   }
   const d = params.get('d');
@@ -29,8 +38,14 @@ export function parseDeepLink(search: string, today = todayUTC()): DeepLink {
 export function clearDeepLink(): void {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
-  if (!url.searchParams.has('d')) return;
-  url.searchParams.delete('d');
+  let changed = false;
+  for (const key of ['d', 'm']) {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key);
+      changed = true;
+    }
+  }
+  if (!changed) return;
   const search = url.searchParams.toString();
   window.history.replaceState(
     null,
