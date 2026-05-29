@@ -188,16 +188,16 @@ export function Blob({
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
       >
-        <ambientLight intensity={0.22} />
+        <ambientLight intensity={0.85} />
         <directionalLight
-          intensity={1.85}
+          intensity={0.45}
           position={[3, 4, 5]}
           color={'#ffffff'}
         />
         <directionalLight
-          intensity={0.6}
+          intensity={0.15}
           position={[-3, -2, 3]}
-          color={'#ffccaa'}
+          color={'#ffffff'}
         />
         <BlobMesh color={color} shrink={shrink} collapsing={collapsing} />
       </Canvas>
